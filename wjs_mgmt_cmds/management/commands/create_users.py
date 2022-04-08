@@ -25,9 +25,18 @@ class Command(BaseCommand):
             'roles',
         ])
         accounts_data = [
-            Account('Autho', 'Rename', 'au1@localdomain', ['author', ]),
-            Account('Refe', 'Ree', 'ref1@localdomain', ['reviewer', ]),
-            Account('Edi', 'Tor', 'ed1@localdomain', ['editor', ]),
+            Account('Autho', 'Rename', 'au1@localdomain', ['Author', ]),
+            Account('Cop', 'Yeditor', 'ce1@localdomain', ['Copyeditor', ]),
+            Account('Edi', 'Tor', 'ed1@localdomain', ['Editor', ]),
+            Account('Pro', 'Duc-Tion', 'prodm1@localdomain',
+                    ['Production Manager', ]),
+            Account('Proof', 'Ingman', 'profm1@localdomain',
+                    ['Proofing Manager', ]),
+            Account('Pro', 'Ofreader', 'profr1@localdomain',
+                    ['Proofreader', ]),
+            Account('Refe', 'Ree', 'ref1@localdomain', ['Reviewer', ]),
+            Account('Sect', 'Ione', 'se1@localdomain', ['Section Editor', ]),
+            Account('Type', 'Setter', 'typ1@localdomain', ['Typesetter', ]),
             ]
 
         jcom = Journal.objects.get(code='JCOM')
