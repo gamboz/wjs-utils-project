@@ -13,15 +13,16 @@ This is a django app that should live inside Janeway. To use it, proceed as foll
    of this app (please see
    https://gitlab.sissamedialab.it/ml-foss/omlpi/-/packages)
 
-2. Add "wjs\_mgmt\_cmds" to Janeway's INSTALLED\_APPS in `src/core/janeway\_global\_setting.py` like this::
-```
-INSTALLED_APPS = [
-    ...
-    'wjs_mgmt_cmds,
-]
-```
+2. Add "wjs\_mgmt\_cmds" to Janeway's INSTALLED\_APPS in
+   `src/core/janeway\_global\_setting.py` like this::
+   ```
+   INSTALLED_APPS = [
+       ...
+       'wjs_mgmt_cmds,
+   ]
+   ```
 
 3. You should now see the new management commands as usual:
-```
-python manage.py help
-```
+   ```
+   python manage.py help
+   ```

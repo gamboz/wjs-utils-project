@@ -45,13 +45,13 @@ class Command(BaseCommand):
         italy = 110
         for account_data in accounts_data:
             username = self.generate_username(account_data)
-            helpers.create_users(username,
-                                 roles=account_data.roles,
-                                 journal=jcom,
-                                 password=password,
-                                 email=account_data.email,
-                                 first_name=account_data.first,
-                                 last_name=account_data.last,
-                                 is_active=True,
-                                 country_id=italy
-                                 )
+            helpers.create_user(username,
+                                roles=account_data.roles,
+                                journal=jcom,
+                                password=password,
+                                email=account_data.email,
+                                first_name=account_data.first,
+                                last_name=account_data.last,
+                                is_active=True,
+                                country_id=italy
+                                )
