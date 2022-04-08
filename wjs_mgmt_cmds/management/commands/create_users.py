@@ -11,7 +11,7 @@ class Command(BaseCommand):
 
     help = 'Create some authors, editors, reviewers, etc…'
 
-    def generate_username(account):
+    def generate_username(self, account):
         """Generate username from first and last name."""
         username = account.first.lower() + account.last.lower()
         return username
