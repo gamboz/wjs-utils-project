@@ -1,0 +1,5 @@
+*~
+scaffold
+venv
+~.pyc
+__pycache__
