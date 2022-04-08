@@ -3,3 +3,5 @@ scaffold
 venv
 ~.pyc
 __pycache__
+dist
+*.egg-info
