@@ -1,7 +1,7 @@
 """Create a bunch of users, useful for testing."""
 
 from collections import namedtuple
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 from journal.models import Journal
 from utils.testing import helpers
 
@@ -57,5 +57,5 @@ class Command(BaseCommand):
                                     country_id=italy
                                     )
             except Exception as exception:
-                raise CommandError("Failed to create %s because of %s",
-                                   account_data, exception)
+                self.stdout.write(f"Failed to create {account_data}"
+                                  f" because of {exception}.")
