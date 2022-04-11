@@ -1,7 +1,7 @@
 """Create a bunch of users, useful for testing."""
 
 from collections import namedtuple
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from journal.models import Journal
 from utils.testing import helpers
 
@@ -45,13 +45,17 @@ class Command(BaseCommand):
         italy = 110
         for account_data in accounts_data:
             username = self.generate_username(account_data)
-            helpers.create_user(username,
-                                roles=account_data.roles,
-                                journal=jcom,
-                                password=password,
-                                email=account_data.email,
-                                first_name=account_data.first,
-                                last_name=account_data.last,
-                                is_active=True,
-                                country_id=italy
-                                )
+            try:
+                helpers.create_user(username,
+                                    roles=account_data.roles,
+                                    journal=jcom,
+                                    password=password,
+                                    email=account_data.email,
+                                    first_name=account_data.first,
+                                    last_name=account_data.last,
+                                    is_active=True,
+                                    country_id=italy
+                                    )
+            except Exception as exception:
+                raise CommandError("Failed to create %s because of %s",
+                                   account_data, exception)
