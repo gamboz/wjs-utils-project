@@ -40,6 +40,8 @@ class Command(BaseCommand):
             ]
 
         jcom = Journal.objects.get(code='JCOM')
+        # TODO: password must be encoded
+        # (i.e. it is not magically encoded for us)
         password = 'pass'
         # country_id for Italy:
         italy = 110
