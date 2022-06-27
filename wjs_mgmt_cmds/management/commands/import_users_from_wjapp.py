@@ -7,6 +7,7 @@ import configparser
 import os
 import pymysql
 import logging
+from wjs_mgmt_cmds.pytyp.affiliationSplitter import splitCountry
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class Command(BaseCommand):
         self.create_or_update(wjapp_user)
 
     def add_arguments(self, parser):
-        """Add arguments."""
+        """Add arguments to mgmt command."""
         parser.add_argument(
             "usercod", type=int, help="The userCod of the user to import"
         )
@@ -34,28 +35,28 @@ class Command(BaseCommand):
         wjapp_user = self.read_data(usercod, connect_string)
         return wjapp_user
 
-    def get_connect_string(self, journal="jcom") -> str:
+    def get_connect_string(self, journal="jcom") -> dict:
         """Return a connection string suitable for pymysql."""
         config = self.read_config(journal)
-        return (
-            f"db={config.get('db')}, "
-            f"host={config.get('db_host')}, "
-            f"user={config.get('db_user')}, "
-            f"password={config.get('db_password')}"
+        return dict(
+            database=config.get('db'),
+            host=config.get('db_host'),
+            user=config.get('db_user'),
+            password=config.get('db_password')
         )
 
     def read_config(self, journal):
         """Read configuration file."""
         # TODO: parametrize
-        cred_file = os.path.join(os.path.dirname(__file__), ".db.ini")
+        cred_file = os.path.join("/tmp", ".db.ini")
         config = configparser.ConfigParser()
         config.read(cred_file)
         return config[journal]
 
-    def read_data(usercod, connect_string):
+    def read_data(self, usercod, connect_string):
         """Connect to DB and return data structure."""
         with pymysql.connect(
-            connect_string, cursorclass=pymysql.cursors.DictCursor
+            **connect_string, cursorclass=pymysql.cursors.DictCursor
         ) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -73,7 +74,9 @@ class Command(BaseCommand):
                     )
                     raise Exception("Unexpected query result. Maybe too many ORCIDids?")
                 # TODO: might need to mangle more data before returning
-                return cursor.fetchone()
+                record = cursor.fetchone()
+                self.mangle_organization(record)
+                return record
 
     def create_or_update(self, wjapp_user):
         """Create or update Janeway user from wjapp data."""
@@ -119,7 +122,7 @@ class Command(BaseCommand):
         # new_user.biography = wjapp_user['biography']
 
         new_user.orcid = wjapp_user["orcid"]
-        # new_user.institution = wjapp_user['institution']  # see above
+        new_user.institution = wjapp_user['institution']
         # new_user.department = wjapp_user['department']
         # new_user.twitter = wjapp_user["twitter"]
         # new_user.facebook = wjapp_user["facebook"]
@@ -134,11 +137,7 @@ class Command(BaseCommand):
 
         # Is "interest" equivalent to ours "keywords"?
         # new_user.interest = wjapp_user["interest"]
-
-        # Asked Elia for the code to extract country from affiliaiton
-        # automagically. Could use that from ftxml2.
-        # new_user.country = wjapp_user["country"]
-
+        new_user.country = wjapp_user["country"]
         # new_user.preferred_timezone = wjapp_user["preferred_timezone"]
 
         # TODO: verify if these can be evinced from the Feature table
@@ -152,3 +151,12 @@ class Command(BaseCommand):
         # new_user.uuid = wjapp_user["uuid"]
 
         new_user.save()
+
+    def mangle_organization(self, record):
+        """Transform wjapp's "organization" into Janeway's "country" and "address"."""
+        dictCountry = splitCountry(record['organization'])
+        check = record.setdefault('country', dictCountry['country'])
+        assert check == dictCountry['country']
+        # institution and address are similar enough for me :)
+        check = record.setdefault('institution', dictCountry['address'])
+        assert check == dictCountry['address']
