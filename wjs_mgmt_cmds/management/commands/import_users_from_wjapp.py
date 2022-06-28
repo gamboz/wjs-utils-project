@@ -157,18 +157,17 @@ class Command(BaseCommand):
 
         # Is "interest" equivalent to ours "keywords"?
         # new_user.interest = wjapp_user["interest"]
-        country = None
+
+        if wjapp_user["country"] is None:
+            logger.warning("No country for user %s", wjapp_user["email"])
         try:
             country = Country.objects.get(name=wjapp_user["country"])
         except Country.DoesNotExist:
-            if wjapp_user["country"] is None:
-                logger.warning("No country for user %s", wjapp_user["email"])
-            else:
-                logger.error(
-                    "Unknown country %s for user %s",
-                    wjapp_user["country"],
-                    wjapp_user["email"],
-                )
+            logger.error(
+                "Unknown country %s for user %s",
+                wjapp_user["country"],
+                wjapp_user["email"],
+            )
         else:
             new_user.country = country
         # new_user.preferred_timezone = wjapp_user["preferred_timezone"]
@@ -210,13 +209,12 @@ class Command(BaseCommand):
             record["country"] = None
             record["institution"] = None
             return
+
+        # This is the iteresting part ⤵
         dictCountry = splitCountry(record["organization"])
+
         check = record.setdefault("country", dictCountry["country"])
         assert check == dictCountry["country"]
-        # Let's change '' to None, so that, elsewhere, I can check
-        # only for None if I need to.
-        if record["country"] == '':
-            record["country"] = None
         # institution and address are similar enough for me :)
         check = record.setdefault("institution", dictCountry["address"])
         assert check == dictCountry["address"]

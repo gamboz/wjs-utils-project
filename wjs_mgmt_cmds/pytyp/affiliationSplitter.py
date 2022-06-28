@@ -83,6 +83,12 @@ def splitCountry(string: str) -> dictCountry:
             # return ask4suggestion(normStr)
     address = ", ".join(splitted[:guess])
     other = r", ".join(splitted[len(splitted) + guess + 1 :])
+    if country == '':
+        country = None
+    if address == '':
+        address = None
+    if other == '':
+        other = None
     return {"country": country, "address": address, "other": other}
 
 
