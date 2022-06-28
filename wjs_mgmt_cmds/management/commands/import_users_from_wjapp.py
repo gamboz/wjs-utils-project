@@ -8,6 +8,8 @@ import os
 import pymysql
 import logging
 from wjs_mgmt_cmds.pytyp.affiliationSplitter import splitCountry
+from wjs.jcom_profile.models import UserCod
+from core.models import Country
 
 logger = logging.getLogger(__name__)
 
@@ -31,18 +33,20 @@ class Command(BaseCommand):
 
     def read_user(self, usercod):
         """Read data from wjapp."""
+        self.usercod = usercod
         connect_string = self.get_connect_string()
-        wjapp_user = self.read_data(usercod, connect_string)
+        wjapp_user = self.read_data(connect_string)
         return wjapp_user
 
     def get_connect_string(self, journal="jcom") -> dict:
         """Return a connection string suitable for pymysql."""
-        config = self.read_config(journal)
+        self.journal = journal
+        config = self.read_config(self.journal)
         return dict(
-            database=config.get('db'),
-            host=config.get('db_host'),
-            user=config.get('db_user'),
-            password=config.get('db_password')
+            database=config.get("db_name"),
+            host=config.get("db_host"),
+            user=config.get("db_user"),
+            password=config.get("db_password"),
         )
 
     def read_config(self, journal):
@@ -53,7 +57,7 @@ class Command(BaseCommand):
         config.read(cred_file)
         return config[journal]
 
-    def read_data(self, usercod, connect_string):
+    def read_data(self, connect_string):
         """Connect to DB and return data structure."""
         with pymysql.connect(
             **connect_string, cursorclass=pymysql.cursors.DictCursor
@@ -65,14 +69,16 @@ class Command(BaseCommand):
                 FROM User u LEFT JOIN OrcidId o ON o.userCod = u.userCod
                 WHERE u.usercod = %s
                 """,
-                    (usercod,),
+                    (self.usercod,),
                 )
                 if cursor.rowcount != 1:
                     logger.error(
                         "Unexpected row count from wjapp: %s instead of 1!",
                         cursor.rowcount,
                     )
-                    raise Exception("Unexpected query result. Maybe too many ORCIDids?")
+                    raise Exception(
+                        "Unexpected query result. Maybe too many ORCIDids?"
+                    )
                 # TODO: might need to mangle more data before returning
                 record = cursor.fetchone()
                 self.mangle_organization(record)
@@ -81,14 +87,28 @@ class Command(BaseCommand):
     def create_or_update(self, wjapp_user):
         """Create or update Janeway user from wjapp data."""
         Account = get_user_model()
-        new_user = Account.objects.get_or_create(usercod=wjapp_user.get("userCod"))
+        # I want to retrieve an account that might already exist
+        # (based on the usercod/journal pair) OR create a new account.
+        defaults = dict(
+            username=wjapp_user["userId"],
+            email=wjapp_user["email"],
+            first_name=wjapp_user["firstName"],  # redundant
+            last_name=wjapp_user["lastName"],  # redundant
+        )
+        # logger.debug("DEFAULTS⩤ %s", defaults)
+        source = [s[0] for s in UserCod.sources if s[1] == self.journal][0]
+        (new_user, created) = Account.objects.get_or_create(
+            defaults=defaults,
+            usercods__userCod=self.usercod,
+            usercods__source=source,
+        )
 
         # Mapping between Janeway core_account and wjapp User
         # ===================================================
 
-        # Fields from wjapp User table
-        # ----------------------------
-        new_user.userCod = wjapp_user["userCod"]  # TODO: Add usercode per journal
+        # Fields from wjapp User table ----------------------------
+        # new_user.userCod = ... see below (data is related to
+        # Account, so an account must exist before saving)
         new_user.username = wjapp_user["userId"]
         # new_user.password = wjapp_user['password']
         # new_user.passwordResetToken = wjapp_user['passwordResetToken']
@@ -121,8 +141,8 @@ class Command(BaseCommand):
         # from Drupal.
         # new_user.biography = wjapp_user['biography']
 
-        new_user.orcid = wjapp_user["orcid"]
-        new_user.institution = wjapp_user['institution']
+        new_user.orcid = wjapp_user["orcidid"]
+        new_user.institution = wjapp_user["institution"]
         # new_user.department = wjapp_user['department']
         # new_user.twitter = wjapp_user["twitter"]
         # new_user.facebook = wjapp_user["facebook"]
@@ -137,7 +157,20 @@ class Command(BaseCommand):
 
         # Is "interest" equivalent to ours "keywords"?
         # new_user.interest = wjapp_user["interest"]
-        new_user.country = wjapp_user["country"]
+        country = None
+        try:
+            country = Country.objects.get(name=wjapp_user["country"])
+        except Country.DoesNotExist:
+            if wjapp_user["country"] is None:
+                logger.warning("No country for user %s", wjapp_user["email"])
+            else:
+                logger.error(
+                    "Unknown country %s for user %s",
+                    wjapp_user["country"],
+                    wjapp_user["email"],
+                )
+        else:
+            new_user.country = country
         # new_user.preferred_timezone = wjapp_user["preferred_timezone"]
 
         # TODO: verify if these can be evinced from the Feature table
@@ -151,12 +184,39 @@ class Command(BaseCommand):
         # new_user.uuid = wjapp_user["uuid"]
 
         new_user.save()
+        if created:
+            logger.debug(
+                "New user created (%s) for %s",
+                new_user.id,
+                wjapp_user["email"],
+            )
+
+        try:
+            UserCod.objects.create(
+                account=new_user, userCod=self.usercod, source=source
+            )
+        except Exception as e:
+            logger.error(
+                "Error storing userCod %s-%s for %s: %s",
+                self.usercod,
+                self.journal,
+                wjapp_user["email"],
+                e,
+            )
 
     def mangle_organization(self, record):
         """Transform wjapp's "organization" into Janeway's "country" and "address"."""
-        dictCountry = splitCountry(record['organization'])
-        check = record.setdefault('country', dictCountry['country'])
-        assert check == dictCountry['country']
+        if record["organization"] is None or record["organization"] == '':
+            record["country"] = None
+            record["institution"] = None
+            return
+        dictCountry = splitCountry(record["organization"])
+        check = record.setdefault("country", dictCountry["country"])
+        assert check == dictCountry["country"]
+        # Let's change '' to None, so that, elsewhere, I can check
+        # only for None if I need to.
+        if record["country"] == '':
+            record["country"] = None
         # institution and address are similar enough for me :)
-        check = record.setdefault('institution', dictCountry['address'])
-        assert check == dictCountry['address']
+        check = record.setdefault("institution", dictCountry["address"])
+        assert check == dictCountry["address"]
