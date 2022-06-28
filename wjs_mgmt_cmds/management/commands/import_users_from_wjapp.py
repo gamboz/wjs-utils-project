@@ -189,19 +189,23 @@ class Command(BaseCommand):
                 new_user.id,
                 wjapp_user["email"],
             )
-
-        try:
-            UserCod.objects.create(
-                account=new_user, userCod=self.usercod, source=source
-            )
-        except Exception as e:
-            logger.error(
-                "Error storing userCod %s-%s for %s: %s",
-                self.usercod,
-                self.journal,
-                wjapp_user["email"],
-                e,
-            )
+            # It is necessary to record the usercod only if the user
+            # has been newly created, because the usercod is used to
+            # "decide" whether to get an existing user or to creat a
+            # new one. When we are here (`created == True`), it means
+            # that no such usercod/journal exited.
+            try:
+                UserCod.objects.create(
+                    account=new_user, userCod=self.usercod, source=source
+                )
+            except Exception as e:
+                logger.error(
+                    "Error storing userCod %s-%s for %s: %s",
+                    self.usercod,
+                    self.journal,
+                    wjapp_user["email"],
+                    e,
+                )
 
     def mangle_organization(self, record):
         """Transform wjapp's "organization" into Janeway's "country" and "address"."""
