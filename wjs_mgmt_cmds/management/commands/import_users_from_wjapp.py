@@ -300,7 +300,7 @@ class Command(BaseCommand):
             logger.warning("No country for user %s", wjapp_user["email"])
         else:
             try:
-                country = Country.objects.get(name=wjapp_user["country"])
+                country = Country.objects.get(name__contains=wjapp_user["country"])
             except Country.DoesNotExist:
                 logger.error(
                     "Unknown country %s for user %s",
