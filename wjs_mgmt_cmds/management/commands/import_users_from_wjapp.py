@@ -1,16 +1,15 @@
-"""Create a bunch of users, useful for testing."""
+"""Import a single user from a journal."""
 
 # from collections import namedtuple
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
-import configparser
-import os
 import pymysql
 import logging
 from wjs_mgmt_cmds.pytyp.affiliationSplitter import splitCountry
 from wjs.jcom_profile.models import UserCod
 from core.models import Country
 import warnings
+from ._utils import get_connect_string
 
 logger = logging.getLogger(__name__)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -25,7 +24,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         """Import the user."""
         # import pudb; pudb.set_trace()
-        wjapp_user = self.read_user(options["usercod"])
+        self.journal = options["journal"]
+        self.usercod = options["usercod"]
+        wjapp_user = self.read_user()
         self.create_or_update(wjapp_user)
 
     def add_arguments(self, parser):
@@ -33,32 +34,15 @@ class Command(BaseCommand):
         parser.add_argument(
             "usercod", type=int, help="The userCod of the user to import"
         )
-
-    def read_user(self, usercod):
-        """Read data from wjapp."""
-        self.usercod = usercod
-        connect_string = self.get_connect_string()
-        wjapp_user = self.read_data(connect_string)
-        return wjapp_user
-
-    def get_connect_string(self, journal="jcom") -> dict:
-        """Return a connection string suitable for pymysql."""
-        self.journal = journal
-        config = self.read_config(self.journal)
-        return dict(
-            database=config.get("db_name"),
-            host=config.get("db_host"),
-            user=config.get("db_user"),
-            password=config.get("db_password"),
+        parser.add_argument(
+            "journal", help="The journal from which to import"
         )
 
-    def read_config(self, journal):
-        """Read configuration file."""
-        # TODO: parametrize
-        cred_file = os.path.join("/tmp", ".db.ini")
-        config = configparser.ConfigParser()
-        config.read(cred_file)
-        return config[journal]
+    def read_user(self):
+        """Read data from wjapp."""
+        connect_string = get_connect_string()
+        wjapp_user = self.read_data(connect_string)
+        return wjapp_user
 
     def read_data(self, connect_string):
         """Connect to DB and return data structure."""
