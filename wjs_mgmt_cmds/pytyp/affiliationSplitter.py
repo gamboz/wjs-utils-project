@@ -60,9 +60,15 @@ def splitCountry(string: str) -> dictCountry:
     if len(splitted) < 2:
         # Troppi pochi pezzi o troppo corto
         logger.warning(
-            'Not enough pieces for country (could be in cluster), unable to find one for "%s"',
+            'Not enough pieces for country in "%s"',
             string,
         )
+        if country.strip() == '':
+            country = None
+        if address.strip() == '':
+            address = None
+        if other.strip() == '':
+            other = None
         return {"country": country, "address": normStr, "other": other}
     # Cerca all'interno del database degli stati
     while (
@@ -82,12 +88,12 @@ def splitCountry(string: str) -> dictCountry:
             # raise error
             # return ask4suggestion(normStr)
     address = ", ".join(splitted[:guess])
-    other = r", ".join(splitted[len(splitted) + guess + 1 :])
-    if country == '':
+    other = r", ".join(splitted[len(splitted) + guess + 1:])
+    if country.strip() == '':
         country = None
-    if address == '':
+    if address.strip() == '':
         address = None
-    if other == '':
+    if other.strip() == '':
         other = None
     return {"country": country, "address": address, "other": other}
 
