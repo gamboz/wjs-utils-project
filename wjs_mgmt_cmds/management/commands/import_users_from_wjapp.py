@@ -236,6 +236,14 @@ class Command(BaseCommand):
         # This is the iteresting part ⤵
         dictCountry = splitCountry(record["organization"])
 
+        # I prefer None over an empty string.
+        if dictCountry["country"] == "":
+            dictCountry["country"] = None
+        if dictCountry["address"] == "":
+            dictCountry["address"] = None
+        if dictCountry["other"] == "":
+            dictCountry["other"] = None
+
         check = record.setdefault("country", dictCountry["country"])
         assert check == dictCountry["country"]
         # institution and address are similar enough for me :)
