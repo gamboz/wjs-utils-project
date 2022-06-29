@@ -34,9 +34,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "usercod", type=int, help="The userCod of the user to import"
         )
-        parser.add_argument(
-            "journal", help="The journal from which to import"
-        )
+        parser.add_argument("journal", help="The journal from which to import")
 
     def read_user(self):
         """Read data from wjapp."""
@@ -281,12 +279,21 @@ class Command(BaseCommand):
     def set_country(self, wjapp_user, janeway_account):
         """Map a wjapp country to Janeway's country."""
         if wjapp_user["country"] is None:
-            logger.warning("No country for user %s (%s)",
-                           wjapp_user["userCod"],
-                           wjapp_user["email"])
+            logger.warning(
+                "No country for user %s (%s)",
+                wjapp_user["userCod"],
+                wjapp_user["email"],
+            )
         else:
+            mymap = dict(
+                UK="United Kingdom",
+            )
             try:
-                country = Country.objects.get(name__contains=wjapp_user["country"])
+                country = Country.objects.get(
+                    name__contains=mymap.get(
+                        wjapp_user["country"], wjapp_user["country"]
+                    )
+                )
             except Country.DoesNotExist:
                 logger.error(
                     "Unknown country %s for user %s",
