@@ -10,8 +10,10 @@ import logging
 from wjs_mgmt_cmds.pytyp.affiliationSplitter import splitCountry
 from wjs.jcom_profile.models import UserCod
 from core.models import Country
+import warnings
 
 logger = logging.getLogger(__name__)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
 class Command(BaseCommand):
@@ -22,6 +24,7 @@ class Command(BaseCommand):
     # Important! This is the entry point.
     def handle(self, *args, **options):
         """Import the user."""
+        # import pudb; pudb.set_trace()
         wjapp_user = self.read_user(options["usercod"])
         self.create_or_update(wjapp_user)
 
@@ -86,130 +89,146 @@ class Command(BaseCommand):
 
     def create_or_update(self, wjapp_user):
         """Create or update Janeway user from wjapp data."""
-        Account = get_user_model()
-        # I want to retrieve an account that might already exist
-        # (based on the usercod/journal pair) OR create a new account.
-        defaults = dict(
-            username=wjapp_user["userId"],
-            email=wjapp_user["email"],
-            first_name=wjapp_user["firstName"],  # redundant
-            last_name=wjapp_user["lastName"],  # redundant
+        # see also https://gitlab.sissamedialab.it/gamboz/wjs-utils-project/-/issues/2
+        email_exists = self.does_email_exists(wjapp_user)
+        (janeway_account, account_created) = self.get_or_create_account(
+            wjapp_user, email_exists
         )
-        # logger.debug("DEFAULTS⩤ %s", defaults)
-        source = [s[0] for s in UserCod.sources if s[1] == self.journal][0]
-        (new_user, created) = Account.objects.get_or_create(
-            defaults=defaults,
-            usercods__userCod=self.usercod,
-            usercods__source=source,
-        )
+        if account_created:
+            if email_exists:
+                # difficult case: should merge two users from different journals
+                logger.debug(
+                    "User %s newly imported from %s, but email (%s) already exists."
+                    " Probably previously imported from other journal.",
+                    self.usercod,
+                    self.journal,
+                    wjapp_user["email"],
+                )
+                self.merge_data(wjapp_user, janeway_account)
+                self.save_usercod(janeway_account)
+            else:
+                # easy case: all new
+                self.save_data(wjapp_user, janeway_account)
+                self.save_usercod(janeway_account)
+        else:
+            if email_exists:
+                # easy case: already imported from same journal
+                # just overwrite data
+                self.save_data(wjapp_user, janeway_account)
+            else:
+                # impossible case
+                logger.error("#!💀???❌@§*.")
 
+    def save_data(self, wjapp_user, janeway_account):
+        """Save (overwrite) wjapp data over Janeway account."""
         # Mapping between Janeway core_account and wjapp User
         # ===================================================
 
-        # Fields from wjapp User table ----------------------------
-        # new_user.userCod = ... see below (data is related to
+        # Fields from wjapp User table
+        # ----------------------------
+        # janeway_account.userCod = ... see below (data is related to
         # Account, so an account must exist before saving)
-        new_user.username = wjapp_user["userId"]
-        # new_user.password = wjapp_user['password']
-        # new_user.passwordResetToken = wjapp_user['passwordResetToken']
-        new_user.email = wjapp_user["email"]
-        new_user.first_name = wjapp_user["firstName"]
-        new_user.middle_name = wjapp_user["middleName"]
-        new_user.last_name = wjapp_user["lastName"]
-        new_user.institution = wjapp_user["organization"]
-        new_user.date_joined = wjapp_user["registrationDate"]
-        # new_user.phone = wjapp_user['phone']
-        # new_user.fax = wjapp_user['fax']
-        # new_user.mobile = wjapp_user['mobile']
-        # new_user.address = wjapp_user['address']
-        # new_user.editorWorkload = wjapp_user['editorWorkload']
-        # new_user.registeredByCod = wjapp_user['registeredByCod']
-        # new_user.registeredByRealCod = wjapp_user['registeredByRealCod']
-        # new_user.privacy = wjapp_user['privacy']
-        # new_user.privacyActionDate = wjapp_user['privacyActionDate']
-        # new_user.commMail = wjapp_user['commMail']
-        # new_user.submissionAllowed = wjapp_user['submissionAllowed']
-        # new_user.lastAccessDate = wjapp_user['lastAccessDate']
+        janeway_account.username = wjapp_user["userId"]
+        # janeway_account.password = wjapp_user['password']
+        # janeway_account.passwordResetToken = wjapp_user['passwordResetToken']
+        janeway_account.email = wjapp_user["email"]
+        janeway_account.first_name = wjapp_user["firstName"]
+        janeway_account.middle_name = wjapp_user["middleName"]
+        janeway_account.last_name = wjapp_user["lastName"]
+        janeway_account.institution = wjapp_user["organization"]
+        janeway_account.date_joined = wjapp_user["registrationDate"]
+        # janeway_account.phone = wjapp_user['phone']
+        # janeway_account.fax = wjapp_user['fax']
+        # janeway_account.mobile = wjapp_user['mobile']
+        # janeway_account.address = wjapp_user['address']
+        # janeway_account.editorWorkload = wjapp_user['editorWorkload']
+        # janeway_account.registeredByCod = wjapp_user['registeredByCod']
+        # janeway_account.registeredByRealCod = wjapp_user['registeredByRealCod']
+        # janeway_account.privacy = wjapp_user['privacy']
+        # janeway_account.privacyActionDate = wjapp_user['privacyActionDate']
+        # janeway_account.commMail = wjapp_user['commMail']
+        # janeway_account.submissionAllowed = wjapp_user['submissionAllowed']
+        # janeway_account.lastAccessDate = wjapp_user['lastAccessDate']
 
         # Fields from Janeway core_account
         # --------------------------------
-        # new_user.activation_code = wjapp_user['activation_code']
-        # new_user.salutation = wjapp_user['salutation']
+        # janeway_account.activation_code = wjapp_user['activation_code']
+        # janeway_account.salutation = wjapp_user['salutation']
 
         # No bio related to a single user in wjapp: there is a
         # `authorsBio` field in the Version table. I will use the info
         # from Drupal.
-        # new_user.biography = wjapp_user['biography']
+        # janeway_account.biography = wjapp_user['biography']
 
-        new_user.orcid = wjapp_user["orcidid"]
-        new_user.institution = wjapp_user["institution"]
-        # new_user.department = wjapp_user['department']
-        # new_user.twitter = wjapp_user["twitter"]
-        # new_user.facebook = wjapp_user["facebook"]
-        # new_user.linkedin = wjapp_user["linkedin"]
-        # new_user.website = wjapp_user["website"]
-        # new_user.github = wjapp_user["github"]
-        # new_user.profile_image = wjapp_user["profile_image"]
-        # new_user.email_sent = wjapp_user["email_sent"]
-        # new_user.date_confirmed = wjapp_user["date_confirmed"]
-        # new_user.confirmation_code = wjapp_user["confirmation_code"]
-        # new_user.signature = wjapp_user["signature"]
+        janeway_account.orcid = wjapp_user["orcidid"]
+        janeway_account.institution = wjapp_user["institution"]
+        # janeway_account.department = wjapp_user['department']
+        # janeway_account.twitter = wjapp_user["twitter"]
+        # janeway_account.facebook = wjapp_user["facebook"]
+        # janeway_account.linkedin = wjapp_user["linkedin"]
+        # janeway_account.website = wjapp_user["website"]
+        # janeway_account.github = wjapp_user["github"]
+        # janeway_account.profile_image = wjapp_user["profile_image"]
+        # janeway_account.email_sent = wjapp_user["email_sent"]
+        # janeway_account.date_confirmed = wjapp_user["date_confirmed"]
+        # janeway_account.confirmation_code = wjapp_user["confirmation_code"]
+        # janeway_account.signature = wjapp_user["signature"]
 
         # Is "interest" equivalent to ours "keywords"?
-        # new_user.interest = wjapp_user["interest"]
+        # janeway_account.interest = wjapp_user["interest"]
 
-        if wjapp_user["country"] is None:
-            logger.warning("No country for user %s", wjapp_user["email"])
-        try:
-            country = Country.objects.get(name=wjapp_user["country"])
-        except Country.DoesNotExist:
-            logger.error(
-                "Unknown country %s for user %s",
-                wjapp_user["country"],
-                wjapp_user["email"],
-            )
-        else:
-            new_user.country = country
-        # new_user.preferred_timezone = wjapp_user["preferred_timezone"]
+        self.set_country(wjapp_user, janeway_account)
+        # janeway_account.preferred_timezone = wjapp_user["preferred_timezone"]
 
         # TODO: verify if these can be evinced from the Feature table
-        # new_user.is_active = wjapp_user["is_active"]
-        # new_user.is_staff = wjapp_user["is_staff"]
-        # new_user.is_admin = wjapp_user["is_admin"]
+        # janeway_account.is_active = wjapp_user["is_active"]
+        # janeway_account.is_staff = wjapp_user["is_staff"]
+        # janeway_account.is_admin = wjapp_user["is_admin"]
 
-        # new_user.enable_digest = wjapp_user["enable_digest"]
-        # new_user.enable_public_profile = wjapp_user["enable_public_profile"]
-        # new_user.date_joined = wjapp_user["date_joined"]
-        # new_user.uuid = wjapp_user["uuid"]
+        # janeway_account.enable_digest = wjapp_user["enable_digest"]
+        # janeway_account.enable_public_profile = wjapp_user["enable_public_profile"]
+        # janeway_account.date_joined = wjapp_user["date_joined"]
+        # janeway_account.uuid = wjapp_user["uuid"]
 
-        new_user.save()
-        if created:
-            logger.debug(
-                "New user created (%s) for %s",
-                new_user.id,
-                wjapp_user["email"],
-            )
-            # It is necessary to record the usercod only if the user
-            # has been newly created, because the usercod is used to
-            # "decide" whether to get an existing user or to creat a
-            # new one. When we are here (`created == True`), it means
-            # that no such usercod/journal exited.
-            try:
-                UserCod.objects.create(
-                    account=new_user, userCod=self.usercod, source=source
-                )
-            except Exception as e:
-                logger.error(
-                    "Error storing userCod %s-%s for %s: %s",
-                    self.usercod,
-                    self.journal,
-                    wjapp_user["email"],
-                    e,
-                )
+        janeway_account.save()
+        # if created:
+        #     logger.debug(
+        #         "New user created (%s) for %s",
+        #         janeway_account.id,
+        #         wjapp_user["email"],
+        #     )
+        #     # It is necessary to record the usercod only if the user
+        #     # has been newly created, because the usercod is used to
+        #     # "decide" whether to get an existing user or to creat a
+        #     # new one. When we are here (`created == True`), it means
+        #     # that no such usercod/journal exited.
+        #     try:
+        #         UserCod.objects.create(
+        #             account=janeway_account,
+        #             userCod=self.usercod,
+        #             source=source,
+        #         )
+        #     except Exception as e:
+        #         logger.error(
+        #             "Error storing userCod %s-%s for %s: %s",
+        #             self.usercod,
+        #             self.journal,
+        #             wjapp_user["email"],
+        #             e,
+        #         )
+
+    def save_usercod(self, janeway_account):
+        """Save the usercod/journal info."""
+        source = [s[0] for s in UserCod.sources if s[1] == self.journal][0]
+        UserCod.objects.create(
+            account=janeway_account,
+            userCod=self.usercod,
+            source=source,
+        )
 
     def mangle_organization(self, record):
         """Transform wjapp's "organization" into Janeway's "country" and "address"."""
-        if record["organization"] is None or record["organization"] == '':
+        if record["organization"] is None or record["organization"] == "":
             record["country"] = None
             record["institution"] = None
             return
@@ -222,3 +241,92 @@ class Command(BaseCommand):
         # institution and address are similar enough for me :)
         check = record.setdefault("institution", dictCountry["address"])
         assert check == dictCountry["address"]
+
+    def get_or_create_account(self, wjapp_user, email_exists):
+        """Similar to django's get_or_create.
+
+        I want to retrieve an account that might already exist (based
+        on the usercod/journal pair) OR create a new account.
+        """
+        created = False
+        Account = get_user_model()
+        source = [s[0] for s in UserCod.sources if s[1] == self.journal][0]
+        try:
+            account = Account.objects.get(
+                usercods__userCod=self.usercod,
+                usercods__source=source,
+            )
+        except Account.DoesNotExist:
+            if email_exists:
+                created = False
+                account = Account.objects.get(email=wjapp_user["email"])
+            else:
+                created = True
+                account = Account(
+                    username=wjapp_user["userId"],
+                    email=wjapp_user["email"],
+                    first_name=wjapp_user["firstName"],  # redundant
+                    last_name=wjapp_user["lastName"],  # redundant
+                )
+            account.save()
+        return (account, created)
+
+    def does_email_exists(self, wjapp_user):
+        """Test whether the given email already exists."""
+        Account = get_user_model()
+        return bool(Account.objects.filter(email=wjapp_user["email"]))
+
+    def merge_data(self, wjapp_user, janeway_account):
+        """Merge new data with existing data."""
+        logger.warning(
+            "Must merge data w:%s-%s / j:%s, but does not know how...",
+            self.usercod,
+            self.journal,
+            janeway_account.id,
+        )
+        self.save_data(wjapp_user, janeway_account)
+
+    def set_country(self, wjapp_user, janeway_account):
+        """Map a wjapp country to Janeway's country."""
+        if wjapp_user["country"] is None:
+            logger.warning("No country for user %s", wjapp_user["email"])
+        else:
+            try:
+                country = Country.objects.get(name=wjapp_user["country"])
+            except Country.DoesNotExist:
+                logger.error(
+                    "Unknown country %s for user %s",
+                    wjapp_user["country"],
+                    wjapp_user["email"],
+                )
+            else:
+                janeway_account.country = country
+
+    # def get_unique_email(self, wjapp_user):
+    #     """Check that the email we are using is unique.
+
+    #     If it is not, generate a unique one and return it.
+    #     I'm assuming that
+
+    #     """
+    #     # wjapp allows for non-unique emails[*]. Let's generate a unique
+    #     # one if we need it.
+    #     # [*] probably only "service" users such as jcom-hidden-user & co.
+    #     #
+    #     # TODO: merge users with same email?
+    #     email = wjapp_user["email"]
+    #     Account = get_user_model()
+    #     try:
+    #         Account.objects.get(email=email)
+    #     except Exception:
+    #         pass
+    #     else:
+    #         (name, domain) = email.split("@")
+    #         unique_email = f"{name}+{self.usercod}@{domain}"
+    #         logger.warning("Account with email %s already exists. Using %s",
+    #                        email, unique_email)
+    #         email = unique_email
+
+    #     defaults = dict(
+    #     )
+    #     return defaults
