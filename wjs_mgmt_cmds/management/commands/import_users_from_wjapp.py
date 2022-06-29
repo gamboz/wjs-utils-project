@@ -281,7 +281,9 @@ class Command(BaseCommand):
     def set_country(self, wjapp_user, janeway_account):
         """Map a wjapp country to Janeway's country."""
         if wjapp_user["country"] is None:
-            logger.warning("No country for user %s", wjapp_user["email"])
+            logger.warning("No country for user %s (%s)",
+                           wjapp_user["userCod"],
+                           wjapp_user["email"])
         else:
             try:
                 country = Country.objects.get(name__contains=wjapp_user["country"])

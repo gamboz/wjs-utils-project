@@ -47,6 +47,8 @@ with open(myDict, "r") as f:
 
 def splitCountry(string: str) -> dictCountry:
     """Trova la country nell'indirizzo."""
+    if string is None or string.strip() == '':
+        return {'country': '', 'address': '', 'other': ''}
     normStr = normalizeString(string, latex=False)
     affStr = correctString(normStr)
     splitted = affStr.split(",")
@@ -200,6 +202,14 @@ splitCountryData = [
         {
             "country": "Singapore",
             "address": "Nanyang Technological University",
+            "other": "",
+        },
+    ),
+    (
+        " ",
+        {
+            "country": "",
+            "address": "",
             "other": "",
         },
     ),
