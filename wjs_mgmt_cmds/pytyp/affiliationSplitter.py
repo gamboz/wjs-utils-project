@@ -63,12 +63,6 @@ def splitCountry(string: str) -> dictCountry:
             'Not enough pieces for country in "%s"',
             string,
         )
-        if country.strip() == '':
-            country = None
-        if address.strip() == '':
-            address = None
-        if other.strip() == '':
-            other = None
         return {"country": country, "address": normStr, "other": other}
     # Cerca all'interno del database degli stati
     while (
@@ -89,12 +83,6 @@ def splitCountry(string: str) -> dictCountry:
             # return ask4suggestion(normStr)
     address = ", ".join(splitted[:guess])
     other = r", ".join(splitted[len(splitted) + guess + 1:])
-    if country.strip() == '':
-        country = None
-    if address.strip() == '':
-        address = None
-    if other.strip() == '':
-        other = None
     return {"country": country, "address": address, "other": other}
 
 
@@ -204,6 +192,14 @@ splitCountryData = [
         {
             "country": "Canada",
             "address": "Department of Physics, University of Alberta, Edmonton AB",
+            "other": "",
+        },
+    ),
+    (
+        "Nanyang Technological University, Singapore",
+        {
+            "country": "Singapore",
+            "address": "Nanyang Technological University",
             "other": "",
         },
     ),
