@@ -6,27 +6,6 @@ import re
 import json
 from pathlib import Path
 from typing import TypedDict, NewType
-from pylatexenc.latex2text import LatexNodes2Text as PL
-from pylatexenc.latexencode import (
-    UnicodeToLatexEncoder,
-    UnicodeToLatexConversionRule,
-    RULE_REGEX,
-)
-
-
-# In questo modo possiamo insegnare allo script le sostituzioni UTF-8
-# che non è in grado di fare.
-UL = UnicodeToLatexEncoder(
-    conversion_rules=[
-        UnicodeToLatexConversionRule(
-            rule_type=RULE_REGEX,
-            rule=[
-                (re.compile(r"ȧ"), r"\.{a}"),
-            ],
-        ),
-        "defaults",
-    ]
-)
 
 
 class dictCountry(TypedDict):
@@ -45,11 +24,15 @@ with open(myDict, "r") as f:
     countries = json.load(f)
 
 
-def splitCountry(string: str) -> dictCountry:
+def splitCountry(
+    string: str, latex_input: bool = True, latex_output: bool = True
+) -> dictCountry:
     """Trova la country nell'indirizzo."""
-    if string is None or string.strip() == '':
-        return {'country': '', 'address': '', 'other': ''}
-    normStr = normalizeString(string, latex=False)
+    if string is None or string.strip() == "":
+        return {"country": "", "address": "", "other": ""}
+    normStr = normalizeString(
+        string, latex_input=latex_input, latex_output=latex_output
+    )
     affStr = correctString(normStr)
     splitted = affStr.split(",")
     if affStr == "":
@@ -84,13 +67,39 @@ def splitCountry(string: str) -> dictCountry:
             # raise error
             # return ask4suggestion(normStr)
     address = ", ".join(splitted[:guess])
-    other = r", ".join(splitted[len(splitted) + guess + 1:])
+    other = r", ".join(splitted[len(splitted) + guess + 1 :])
     return {"country": country, "address": address, "other": other}
 
 
-def normalizeString(string: str, latex: bool = True) -> nString:
+def normalizeString(
+    string: str, latex_input: bool = True, latex_output: bool = True
+) -> nString:
     """Normalizza la stringa facendo pulizia."""
-    norm = PL().latex_to_text(string)
+    if latex_input:
+        from pylatexenc.latex2text import LatexNodes2Text as PL
+        from pylatexenc.latexencode import (
+            UnicodeToLatexEncoder,
+            UnicodeToLatexConversionRule,
+            RULE_REGEX,
+        )
+
+        # In questo modo possiamo insegnare allo script le sostituzioni UTF-8
+        # che non è in grado di fare.
+        UL = UnicodeToLatexEncoder(
+            conversion_rules=[
+                UnicodeToLatexConversionRule(
+                    rule_type=RULE_REGEX,
+                    rule=[
+                        (re.compile(r"ȧ"), r"\.{a}"),
+                    ],
+                ),
+                "defaults",
+            ]
+        )
+        norm = PL().latex_to_text(string)
+    else:
+        norm = string
+
     # Rimozione egli spazi non secabili
     norm = norm.replace("\xa0", " ")
     # Stripping e pulizie
@@ -100,7 +109,7 @@ def normalizeString(string: str, latex: bool = True) -> nString:
     # Controlla che sia normalizzata
     assert isNormalized(norm)
     # Torna alla versione latex
-    if latex:
+    if latex_output:
         norm = UL.unicode_to_latex(norm)
     # Rimette gli a capo
     return norm
@@ -219,7 +228,7 @@ splitCountryData = [
 @pytest.mark.parametrize("inStr,expected", splitCountryData)
 def test_splitCountry(inStr: str, expected: dictCountry) -> None:
     """Test split."""
-    outStr = splitCountry(inStr)
+    outStr = splitCountry(inStr, latex_input=True, latex_output=False)
     assert outStr == expected
 
 

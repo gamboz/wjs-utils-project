@@ -234,7 +234,9 @@ class Command(BaseCommand):
             return
 
         # This is the iteresting part ⤵
-        dictCountry = splitCountry(record["organization"])
+        dictCountry = splitCountry(
+            record["organization"], latex_input=False, latex_output=False
+        )
 
         # I prefer None over an empty string.
         if dictCountry["country"] == "":
