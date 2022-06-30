@@ -270,8 +270,14 @@ class Command(BaseCommand):
                 account = Account.objects.get(email=wjapp_user["email"])
             else:
                 created = True
+                # NB: the custom manager kicks-in only if
+                #     Account.objects.create(...)
+                # is used, but not in the case of
+                #     x = Account(...)
+                #     x.save()
                 account = Account(
-                    username=wjapp_user["userId"],
+                    # username=wjapp_user["userId"],
+                    username=wjapp_user["email"].lower(),
                     email=wjapp_user["email"],
                     first_name=wjapp_user["firstName"],  # redundant
                     last_name=wjapp_user["lastName"],  # redundant
