@@ -8,6 +8,7 @@ import logging
 from wjs_mgmt_cmds.pytyp.affiliationSplitter import splitCountry
 from wjs.jcom_profile.models import UserCod
 from core.models import Country
+from django.core.exceptions import MultipleObjectsReturned
 import warnings
 from ._utils import get_connect_string
 
@@ -38,7 +39,7 @@ class Command(BaseCommand):
 
     def read_user(self):
         """Read data from wjapp."""
-        connect_string = get_connect_string()
+        connect_string = get_connect_string(journal=self.journal)
         wjapp_user = self.read_data(connect_string)
         return wjapp_user
 
@@ -58,7 +59,8 @@ class Command(BaseCommand):
                 )
                 if cursor.rowcount != 1:
                     logger.error(
-                        "Unexpected row count from wjapp: %s instead of 1!",
+                        "Unexpected row count for %s: %s/1!",
+                        self.usercod,
                         cursor.rowcount,
                     )
                     raise Exception(
