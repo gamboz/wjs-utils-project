@@ -285,21 +285,39 @@ class Command(BaseCommand):
                 wjapp_user["email"],
             )
         else:
+            # core.models.Country have a limited set of names.
+            # I must alias some.
             mymap = dict(
                 UK="United Kingdom",
             )
             try:
                 country = Country.objects.get(
-                    name__contains=mymap.get(
+                    name=mymap.get(
                         wjapp_user["country"], wjapp_user["country"]
                     )
                 )
             except Country.DoesNotExist:
-                logger.error(
-                    "Unknown country %s for user %s",
-                    wjapp_user["country"],
-                    wjapp_user["email"],
-                )
+                # maybe we get luky with a "LIKE" search:
+                try:
+                    country = Country.objects.get(
+                        name__contains=mymap.get(
+                            wjapp_user["country"], wjapp_user["country"]
+                        )
+                    )
+                except Country.DoesNotExist:
+                    logger.error(
+                        'Unknown country "%s" for user %s (%s)',
+                        wjapp_user["country"],
+                        wjapp_user["userCod"],
+                        wjapp_user["email"],
+                    )
+                except MultipleObjectsReturned:
+                    logger.error(
+                        """Cannot map "%s" to Janeway's countries for %s (%s)""",
+                        wjapp_user["country"],
+                        wjapp_user["userCod"],
+                        wjapp_user["email"],
+                    )
             else:
                 janeway_account.country = country
 
