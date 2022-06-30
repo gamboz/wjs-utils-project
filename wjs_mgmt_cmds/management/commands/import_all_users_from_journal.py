@@ -6,6 +6,7 @@ import logging
 import warnings
 import pymysql
 from ._utils import get_connect_string
+from .import_user_from_wjapp import Command as Import_user_from_wjapp
 
 logger = logging.getLogger(__name__)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -19,11 +20,15 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         """Import all users from a journal."""
         self.journal = options["journal"]
+        self.connection = pymysql.connect(**get_connect_string(self.journal))
+        cmd = Import_user_from_wjapp()
+        cmd.connection = self.connection
         counter = 0
         for record in self.get_all_usercods():
             usercod = record[0]
             call_command("import_user_from_wjapp", usercod, self.journal)
             counter += 1
+        self.connection.close()
         self.stdout.write(f"Imported {counter} users")
 
     def add_arguments(self, parser):
@@ -34,7 +39,6 @@ class Command(BaseCommand):
 
     def get_all_usercods(self):
         """Return all usercods of a certain journal."""
-        with pymysql.connect(**get_connect_string(self.journal)) as connection:
-            with connection.cursor() as cursor:
-                cursor.execute("""SELECT userCod from User order by userCod""")
-                return cursor
+        with self.connection.cursor() as cursor:
+            cursor.execute("""SELECT userCod from User order by userCod""")
+            return cursor

@@ -37,39 +37,48 @@ class Command(BaseCommand):
         )
         parser.add_argument("journal", help="The journal from which to import")
 
+    def __init__(self, *args, **kwargs):
+        """Initialize: make place for a `connection`."""
+        super().__init__(*args, **kwargs)
+        self.connection = None
+        self.connection_locally_created = False
+
     def read_user(self):
         """Read data from wjapp."""
-        connect_string = get_connect_string(journal=self.journal)
-        wjapp_user = self.read_data(connect_string)
+        wjapp_user = self.read_data()
         return wjapp_user
 
-    def read_data(self, connect_string):
+    def read_data(self):
         """Connect to DB and return data structure."""
-        with pymysql.connect(
-            **connect_string, cursorclass=pymysql.cursors.DictCursor
-        ) as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                SELECT u.*, o.orcidid
-                FROM User u LEFT JOIN OrcidId o ON o.userCod = u.userCod
-                WHERE u.usercod = %s
-                """,
-                    (self.usercod,),
+        if self.connection is None:
+            connect_string = get_connect_string(journal=self.journal)
+            self.connection = pymysql.connect(
+                **connect_string, cursorclass=pymysql.cursors.DictCursor
+            )
+            self.connection_locally_created = True
+
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                """
+            SELECT u.*, o.orcidid
+            FROM User u LEFT JOIN OrcidId o ON o.userCod = u.userCod
+            WHERE u.usercod = %s
+            """,
+                (self.usercod,),
+            )
+            if cursor.rowcount != 1:
+                logger.error(
+                    "Unexpected row count for %s: %s/1!",
+                    self.usercod,
+                    cursor.rowcount,
                 )
-                if cursor.rowcount != 1:
-                    logger.error(
-                        "Unexpected row count for %s: %s/1!",
-                        self.usercod,
-                        cursor.rowcount,
-                    )
-                    raise Exception(
-                        "Unexpected query result. Maybe too many ORCIDids?"
-                    )
-                # TODO: might need to mangle more data before returning
-                record = cursor.fetchone()
-                self.mangle_organization(record)
-                return record
+                raise Exception(
+                    "Unexpected query result. Maybe too many ORCIDids?"
+                )
+            # TODO: might need to mangle more data before returning
+            record = cursor.fetchone()
+            self.mangle_organization(record)
+            return record
 
     def create_or_update(self, wjapp_user):
         """Create or update Janeway user from wjapp data."""
@@ -103,6 +112,10 @@ class Command(BaseCommand):
                 # impossible case
                 logger.error("#!💀???❌@§*.")
 
+        # Housekeeping
+        if self.connection_locally_created:
+            self.connection.close()
+
     def save_data(self, wjapp_user, janeway_account):
         """Save (overwrite) wjapp data over Janeway account."""
         # Mapping between Janeway core_account and wjapp User
@@ -112,7 +125,10 @@ class Command(BaseCommand):
         # ----------------------------
         # janeway_account.userCod = ... see below (data is related to
         # Account, so an account must exist before saving)
-        janeway_account.username = wjapp_user["userId"]
+
+        # do NOT set the username! It is automatically set by the
+        # AccountManager to be the `lowercase()` of the email.
+        # janeway_account.username = wjapp_user["userId"]
         # janeway_account.password = wjapp_user['password']
         # janeway_account.passwordResetToken = wjapp_user['passwordResetToken']
         janeway_account.email = wjapp_user["email"]
