@@ -103,6 +103,11 @@ def normalizeString(
     # Rimozione egli spazi non secabili
     norm = norm.replace("\xa0", " ")
     # Stripping e pulizie
+    # -------------------
+    # remove comma and semicolon from the beginning and end of the string
+    norm = re.sub(r"^[,;]+", "", norm)
+    norm = re.sub(r"[,;]+$", "", norm)
+    #
     norm = re.sub(r"(\w\)*)[\s,;]+(\.*$)", r"\1\2", norm)
     norm = re.sub(r"\s+", " ", norm)
     norm = norm.strip()
@@ -246,6 +251,9 @@ normalizeData = [
         r"`siao'\,po\~nllo~cà\\no;\.a~~\"{u}op\;ppo~,~\ ~U.S.A.",
         "`siao' po\\~nllo c\\`a no;\\.{a} \\\"uop ppo , U.S.A.",
     ),
+    # Found in field `organization` of jhep user 4921:
+    # note the "," at the end of the string.
+    ("Reametrix India Pvt. Ltd.,", "Reametrix India Pvt. Ltd."),
 ]
 
 
