@@ -26,95 +26,90 @@ class Command(BaseCommand):
         """Import the user."""
         # import pudb; pudb.set_trace()
         self.journal = options["journal"]
-        self.usercod = options["usercod"]
-        wjapp_user = self.read_user()
-        self.create_or_update(wjapp_user)
+        if options["usercod"]:
+            self.usercod = options["usercod"]
+
+        self.create_or_update_accounts()
 
     def add_arguments(self, parser):
         """Add arguments to mgmt command."""
         parser.add_argument(
-            "usercod", type=int, help="The userCod of the user to import"
+            "journal",
+            help="The journal from which to import all accounts."
+            ' To import only one account, use the option "--usercod".',
         )
-        parser.add_argument("journal", help="The journal from which to import")
+        parser.add_argument(
+            "--usercod", type=int, help="The userCod of the account to import."
+        )
 
     def __init__(self, *args, **kwargs):
-        """Initialize: make place for a `connection`."""
+        """Initialize."""
         super().__init__(*args, **kwargs)
-        self.connection = None
-        self.connection_locally_created = False
+        self.journal = None
+        self.usercod = None
 
-    def read_user(self):
-        """Read data from wjapp."""
-        wjapp_user = self.read_data()
-        return wjapp_user
-
-    def read_data(self):
-        """Connect to DB and return data structure."""
-        if self.connection is None:
-            connect_string = get_connect_string(journal=self.journal)
-            self.connection = pymysql.connect(
-                **connect_string, cursorclass=pymysql.cursors.DictCursor
-            )
-            self.connection_locally_created = True
-
-        with self.connection.cursor() as cursor:
-            cursor.execute(
-                """
-            SELECT u.*, o.orcidid
-            FROM User u LEFT JOIN OrcidId o ON o.userCod = u.userCod
-            WHERE u.usercod = %s
-            """,
-                (self.usercod,),
-            )
-            if cursor.rowcount != 1:
-                logger.error(
-                    "Unexpected row count for %s: %s/1!",
-                    self.usercod,
-                    cursor.rowcount,
+    def read_users(self):
+        """Read data from wjapp DB."""
+        with pymysql.connect(
+            **get_connect_string(journal=self.journal),
+            cursorclass=pymysql.cursors.DictCursor,
+        ) as connection:
+            with connection.cursor() as cursor:
+                where_clause = ""
+                args = None
+                if self.usercod is not None:
+                    where_clause = "WHERE u.usercod = %s"
+                    args = (self.usercod,)
+                cursor.execute(
+                    f"""
+                SELECT u.*, o.orcidid
+                FROM User u LEFT JOIN OrcidId o ON o.userCod = u.userCod
+                {where_clause}
+                """,
+                    args,
                 )
-                raise Exception(
-                    "Unexpected query result. Maybe too many ORCIDids?"
-                )
-            # TODO: might need to mangle more data before returning
-            record = cursor.fetchone()
-            self.mangle_organization(record)
-            return record
+                if cursor.rowcount < 1:
+                    logger.error(
+                        "Nothing found for %s on %s!",
+                        self.usercod,
+                        self.journal,
+                    )
+                return cursor
 
-    def create_or_update(self, wjapp_user):
+    def create_or_update_accounts(self):
         """Create or update Janeway user from wjapp data."""
         # see also https://gitlab.sissamedialab.it/gamboz/wjs-utils-project/-/issues/2
-        email_exists = self.does_email_exists(wjapp_user)
-        (janeway_account, account_created) = self.get_or_create_account(
-            wjapp_user, email_exists
-        )
-        if account_created:
-            if email_exists:
-                # difficult case: should merge two users from different journals
-                logger.debug(
-                    "User %s newly imported from %s, but email (%s) already exists."
-                    " Probably previously imported from other journal.",
-                    self.usercod,
-                    self.journal,
-                    wjapp_user["email"],
-                )
-                self.merge_data(wjapp_user, janeway_account)
-                self.save_usercod(janeway_account)
-            else:
-                # easy case: all new
-                self.save_data(wjapp_user, janeway_account)
-                self.save_usercod(janeway_account)
-        else:
-            if email_exists:
-                # easy case: already imported from same journal
-                # just overwrite data
-                self.save_data(wjapp_user, janeway_account)
-            else:
-                # impossible case
-                logger.error("#!💀???❌@§*.")
+        for wjapp_user in self.read_users():
+            self.mangle_organization(wjapp_user)
 
-        # Housekeeping
-        if self.connection_locally_created:
-            self.connection.close()
+            email_exists = self.does_email_exists(wjapp_user)
+            (janeway_account, account_created) = self.get_or_create_account(
+                wjapp_user, email_exists
+            )
+            if account_created:
+                if email_exists:
+                    # difficult case: should merge two users from different journals
+                    logger.debug(
+                        "User %s newly imported from %s, but email (%s) already exists."
+                        " Probably previously imported from other journal.",
+                        wjapp_user["userCod"],
+                        self.journal,
+                        wjapp_user["email"],
+                    )
+                    self.merge_data(wjapp_user, janeway_account)
+                    self.save_usercod(janeway_account, wjapp_user["userCod"])
+                else:
+                    # easy case: all new
+                    self.save_data(wjapp_user, janeway_account)
+                    self.save_usercod(janeway_account, wjapp_user["userCod"])
+            else:
+                if email_exists:
+                    # easy case: already imported from same journal
+                    # just overwrite data
+                    self.save_data(wjapp_user, janeway_account)
+                else:
+                    # impossible case
+                    logger.error("#!💀???❌@§*.")
 
     def save_data(self, wjapp_user, janeway_account):
         """Save (overwrite) wjapp data over Janeway account."""
@@ -217,17 +212,20 @@ class Command(BaseCommand):
         #             e,
         #         )
 
-    def save_usercod(self, janeway_account):
+    def save_usercod(self, janeway_account, userCod):
         """Save the usercod/journal info."""
         source = [s[0] for s in UserCod.sources if s[1] == self.journal][0]
         UserCod.objects.create(
             account=janeway_account,
-            userCod=self.usercod,
+            userCod=userCod,
             source=source,
         )
 
     def mangle_organization(self, record):
-        """Transform wjapp's "organization" into Janeway's "country" and "address"."""
+        """Return data structure suitable for import.
+
+        Transform wjapp's "organization" into Janeway's "country" and "address".
+        """
         if record["organization"] is None or record["organization"] == "":
             record["country"] = None
             record["institution"] = None
@@ -263,7 +261,7 @@ class Command(BaseCommand):
         source = [s[0] for s in UserCod.sources if s[1] == self.journal][0]
         try:
             account = Account.objects.get(
-                usercods__userCod=self.usercod,
+                usercods__userCod=wjapp_user["userCod"],
                 usercods__source=source,
             )
         except Account.DoesNotExist:
@@ -290,7 +288,7 @@ class Command(BaseCommand):
         """Merge new data with existing data."""
         logger.warning(
             "Must merge data w:%s-%s / j:%s, but does not know how...",
-            self.usercod,
+            wjapp_user["userCod"],
             self.journal,
             janeway_account.id,
         )
