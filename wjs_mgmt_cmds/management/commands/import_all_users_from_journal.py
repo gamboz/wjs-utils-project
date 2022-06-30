@@ -22,7 +22,7 @@ class Command(BaseCommand):
         counter = 0
         for record in self.get_all_usercods():
             usercod = record[0]
-            call_command("import_users_from_wjapp", usercod, self.journal)
+            call_command("import_user_from_wjapp", usercod, self.journal)
             counter += 1
         self.stdout.write(f"Imported {counter} users")
 
