@@ -5,9 +5,7 @@ from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 import pymysql
 import logging
-from wjs_mgmt_cmds.pytyp.affiliationSplitter import splitCountry
 from wjs.jcom_profile.models import UserCod
-from core.models import Country
 from django.core.exceptions import MultipleObjectsReturned
 import warnings
 from ._utils import get_connect_string
@@ -172,7 +170,9 @@ class Command(BaseCommand):
         # Is "interest" equivalent to ours "keywords"?
         # janeway_account.interest = wjapp_user["interest"]
 
-        self.set_country(wjapp_user, janeway_account)
+        # Do not bother with the country just now. We'll set it later.
+        # janeway_account.country = ...
+
         # janeway_account.preferred_timezone = wjapp_user["preferred_timezone"]
 
         # TODO: verify if these can be evinced from the Feature table
@@ -220,35 +220,6 @@ class Command(BaseCommand):
             userCod=userCod,
             source=source,
         )
-
-    def mangle_organization(self, record):
-        """Return data structure suitable for import.
-
-        Transform wjapp's "organization" into Janeway's "country" and "address".
-        """
-        if record["organization"] is None or record["organization"] == "":
-            record["country"] = None
-            record["institution"] = None
-            return
-
-        # This is the iteresting part ⤵
-        dictCountry = splitCountry(
-            record["organization"], latex_input=False, latex_output=False
-        )
-
-        # I prefer None over an empty string.
-        if dictCountry["country"] == "":
-            dictCountry["country"] = None
-        if dictCountry["address"] == "":
-            dictCountry["address"] = None
-        if dictCountry["other"] == "":
-            dictCountry["other"] = None
-
-        check = record.setdefault("country", dictCountry["country"])
-        assert check == dictCountry["country"]
-        # institution and address are similar enough for me :)
-        check = record.setdefault("institution", dictCountry["address"])
-        assert check == dictCountry["address"]
 
     def get_or_create_account(self, wjapp_user, email_exists):
         """Similar to django's get_or_create.
@@ -299,51 +270,6 @@ class Command(BaseCommand):
             janeway_account.id,
         )
         self.save_data(wjapp_user, janeway_account)
-
-    def set_country(self, wjapp_user, janeway_account):
-        """Map a wjapp country to Janeway's country."""
-        if wjapp_user["country"] is None:
-            logger.warning(
-                "No country for user %s (%s)",
-                wjapp_user["userCod"],
-                wjapp_user["email"],
-            )
-        else:
-            # core.models.Country have a limited set of names.
-            # I must alias some.
-            mymap = dict(
-                UK="United Kingdom",
-            )
-            try:
-                country = Country.objects.get(
-                    name=mymap.get(
-                        wjapp_user["country"], wjapp_user["country"]
-                    )
-                )
-            except Country.DoesNotExist:
-                # maybe we get luky with a "LIKE" search:
-                try:
-                    country = Country.objects.get(
-                        name__contains=mymap.get(
-                            wjapp_user["country"], wjapp_user["country"]
-                        )
-                    )
-                except Country.DoesNotExist:
-                    logger.error(
-                        'Unknown country "%s" for user %s (%s)',
-                        wjapp_user["country"],
-                        wjapp_user["userCod"],
-                        wjapp_user["email"],
-                    )
-                except MultipleObjectsReturned:
-                    logger.error(
-                        """Cannot map "%s" to Janeway's countries for %s (%s)""",
-                        wjapp_user["country"],
-                        wjapp_user["userCod"],
-                        wjapp_user["email"],
-                    )
-            else:
-                janeway_account.country = country
 
     # def get_unique_email(self, wjapp_user):
     #     """Check that the email we are using is unique.
