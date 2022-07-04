@@ -1,7 +1,6 @@
 """Estrae il country da una stringa (che sia affiliazione)."""
 
 import logging
-import re
 from collections import namedtuple
 from argparse import Namespace
 from core.models import Country
@@ -37,6 +36,7 @@ aliases = {
     "people's republic of china": "China",
     "perú": "Peru",
     "republic of korea": "Korea, Republic of",
+    "sissa medialab": "Italy",
     "slovenija": "Slovenia",
     "uk": "United Kingdom",
     "u.k.": "United Kingdom",
@@ -95,6 +95,10 @@ def find_country(normStr: str):
         if country_key in normStr:
             return (Country.objects.get(name=aliases.get(country_key)), country_key)
 
+    logger.warning('Cannot identify country in "%s".',
+                   normStr)
+    return (None, None)
+
 
 def splitCountry(string: str, options: Namespace = None) -> Address:
     """Trova la country nell'indirizzo."""
@@ -103,6 +107,8 @@ def splitCountry(string: str, options: Namespace = None) -> Address:
     normStr = normalizeString(string)
 
     (country, source_string) = find_country(normStr)
+    if country is None:
+        return Address(None, None)
     assert source_string in normStr.lower()
     organization = normStr
 
