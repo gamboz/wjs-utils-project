@@ -3,6 +3,7 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from wjs_mgmt_cmds.pytyp.affiliationSplitter import splitCountry
+from collections.abc import Iterable
 import logging
 import warnings
 
@@ -84,18 +85,21 @@ class Command(BaseCommand):
         else:
             if account.country:
                 logger.info(
-                    'Not setting country on %s because "%s" is already present.'
+                    'Not setting country on %s (%s) because "%s" is already present.'
                     ' Use "--force" to force.',
                     account.id,
+                    account.institution,
                     account.country,
                 )
 
     @property
-    def accounts(self):
+    def accounts(self) -> Iterable:
         """Make a query set with the accounts to check."""
         Account = get_user_model()
         if self.options["accountid"]:
-            return Account.objects.get(id=self.options["accountid"])
+            return [
+                Account.objects.get(id=self.options["accountid"]),
+            ]
 
         if self.options["start_from"]:
             return Account.objects.filter(
@@ -117,12 +121,22 @@ class Command(BaseCommand):
 
     def set_organization(self, account, address):
         """Set the organization, honoring options."""
-        if self.options["dry_run"]:
-            self.stdout.write(
-                f'Would set organization="{address.organization}"'
-                f" for account {account.pk}"
-                f' because of "{address.country}".'
+        if self.options["remove_from_organization"]:
+            logger.warning(
+                'Option "remove-from-organization" is not implemented yet!'
             )
-        else:
-            if self.options["remove_from_organization"]:
-                account.institution = address.organization
+            # organization = normStr.replace(source_string, "")
+            # organization = re.sub("[, ]+$", "", organization)
+
+            # Just return here until we implement this feature.
+            return
+
+            if self.options["dry_run"]:
+                self.stdout.write(
+                    f'Would set organization="{address.organization}"'
+                    f" for account {account.pk}"
+                    f' because of "{address.country}".'
+                )
+            else:
+                if self.options["remove_from_organization"]:
+                    account.institution = address.organization
