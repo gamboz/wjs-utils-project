@@ -21,24 +21,29 @@ logger = logging.getLogger(__name__)
 country_names = sorted(
     Country.objects.values_list("name", flat=True), key=len, reverse=True
 )
+country_keys = {x.lower(): x for x in country_names}
 
 # core.models.Country have a limited set of names.
 # I must alias some.
 # NB: delicate! We expect that the values of this dict are existing `Country.name`s!
 aliases = {
-    "Korea": "Korea, Republic of",
-    "Italia": "Italy",
-    "México": "Mexico",
-    "PR China": "China",
-    "P.R. China": "China",
-    "People's Republic of China": "China",
-    "Republic of Korea": "Korea, Republic of",
-    "UK": "United Kingdom",
-    "U.K.": "United Kingdom",
-    "USA": "United States",
-    "U.S.A.": "United States",
-    "The Netherlands": "Netherlands",
-    "Vietnam": "Viet Nam",
+    "brasil": "Brazil",
+    "korea": "Korea, Republic of",
+    "iran": "Iran, Islamic Republic of",
+    "italia": "Italy",
+    "méxico": "Mexico",
+    "pr china": "China",
+    "p.r. china": "China",
+    "people's republic of china": "China",
+    "perú": "Peru",
+    "republic of korea": "Korea, Republic of",
+    "slovenija": "Slovenia",
+    "uk": "United Kingdom",
+    "u.k.": "United Kingdom",
+    "usa": "United States",
+    "u.s.a.": "United States",
+    "the netherlands": "Netherlands",
+    "vietnam": "Viet Nam",
 }
 alias_keys = sorted(aliases, key=len, reverse=True)
 
@@ -54,37 +59,41 @@ def find_country(normStr: str):
     #
     # [*] "perceived" because I didn't do any test (yet) ;)
 
+    # do all comparison case-insensitive
+    normStr = normStr.lower()
+
     # step 1:
     # if last piece after split-at-comma is a known country or alias,
     # then use it
-    candidate = normStr.split(",")[-1].strip()
-    if candidate in country_names:
-        return (Country.objects.get(name=candidate), candidate)
+    candidate = normStr.split(",")[-1].strip().lower()
+    if candidate in country_keys:
+        return (Country.objects.get(name=country_keys[candidate]), candidate)
     if candidate in alias_keys:
         return (Country.objects.get(name=aliases.get(candidate)), candidate)
 
     # step 2:
     # if last piece after split-at-space is a known country or alias,
     # then use it
-    candidate = normStr.split(" ")[-1].strip()
-    if candidate in country_names:
-        return (Country.objects.get(name=candidate), candidate)
+    candidate = normStr.split(" ")[-1].strip().lower()
+    if candidate in country_keys:
+        return (Country.objects.get(name=country_keys[candidate]), candidate)
     if candidate in alias_keys:
         return (Country.objects.get(name=aliases.get(candidate)), candidate)
 
+    # step 3
     # step 3a:
     # sort known countries by length,
     # grep country in string
-    for country_name in country_names:
-        if country_name in normStr:
-            return (Country.objects.get(name=country_name), country_name)
+    for country_key in country_keys:
+        if country_key in normStr:
+            return (Country.objects.get(name=country_keys[country_key]), country_key)
 
     # step 3b
     # sort known aliases by length,
     # grep alias in string
-    for country_name in alias_keys:
-        if country_name in normStr:
-            return (Country.objects.get(name=aliases.get(candidate)), country_name)
+    for country_key in alias_keys:
+        if country_key in normStr:
+            return (Country.objects.get(name=aliases.get(country_key)), country_key)
 
 
 def splitCountry(string: str, options: Namespace = None) -> Address:
@@ -94,12 +103,13 @@ def splitCountry(string: str, options: Namespace = None) -> Address:
     normStr = normalizeString(string)
 
     (country, source_string) = find_country(normStr)
-    assert source_string in normStr
+    assert source_string in normStr.lower()
     organization = normStr
 
     if options:
         if options["remove_from_organization"]:
-            organization = normStr.replace(source_string, "")
-            organization = re.sub("[, ]+$", "", organization)
+            logger.warning('Option "remove-from-organization" is not implemented yet!')
+            # organization = normStr.replace(source_string, "")
+            # organization = re.sub("[, ]+$", "", organization)
 
     return Address(country, organization)

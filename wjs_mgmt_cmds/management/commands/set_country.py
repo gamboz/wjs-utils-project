@@ -38,7 +38,8 @@ class Command(BaseCommand):
         parser.add_argument(
             "--remove-from-organization",
             action="store_true",
-            help="If a country is found in the `organization` field,"
+            help="NOT IMPLEMENTED!"
+            " If a country is found in the `organization` field,"
             " use it for the field `country`"
             " AND remove it from the `organization` string."
             " Warning: the form of the `organization` migth change sligthly,"
